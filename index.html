@@ -1,0 +1,173 @@
+<!doctype html> 
+<html lang="en"> 
+<head> 
+    <meta charset="UTF-8" />
+    <title>Making your first Phaser 3 Game - Part 1</title>
+    <script src="//cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
+    <style type="text/css">
+        body {
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript">
+
+    var config = {
+        type: Phaser.AUTO,
+        width: 800,
+        height: 600,
+        physics: {
+        default: 'arcade',
+        arcade: { gravity: { y: 300 }, debug: false}
+        },
+        scene: {
+            preload: preload,
+            create: create,
+            update: update
+        }
+    }
+
+    var game = new Phaser.Game(config)
+    var platforms
+    var player
+    var cursors
+    var stars
+    var score = 0
+    var scoreText
+
+    function preload ()
+    {
+        // pre-loading all the assets required, nothing will render yet:
+        this.load.image('sky', 'assets/sky.png')
+        this.load.image('ground', 'assets/platform.png')
+        this.load.image('star', 'assets/star.png')
+        this.load.image('bomb', 'assets/bomb.png')
+        this.load.spritesheet('dude', 'assets/dude.png', { frameWidth: 32, frameHeight: 48 } )
+    }
+
+    function create ()
+    {
+        // adding the sky background to the create object so it will render on screen:
+        this.add.image(400, 300, 'sky')
+
+        // adding a scoreboard
+        // 16, 16 are the cordinates of the display, 'score 0' is the default, object details font and background colour:
+        scoreText = this.add.text(16, 16, 'score: 0', { fontSize: '32px', fill: '#000' });
+        
+        // adding the platforms and ground:
+        platforms = this.physics.add.staticGroup()
+        platforms.create(400, 568, 'ground').setScale(2).refreshBody()
+        platforms.create(600, 400, 'ground')
+        platforms.create(50, 250, 'ground')
+        platforms.create(750, 220, 'ground')
+
+        // adding the player:
+        player = this.physics.add.sprite(100, 450, 'dude')
+        player.setBounce(0.2)
+        player.setCollideWorldBounds(true)
+
+        this.anims.create({
+            key: 'left',
+            frames: this.anims.generateFrameNumbers('dude', { start: 0, end: 3 }),
+            frameRate: 10,
+            repeat: -1
+        })
+
+        this.anims.create({
+            key: 'turn',
+            frames: [ { key: 'dude', frame: 4 } ],
+            frameRate: 20
+        })
+
+        this.anims.create({
+            key: 'right',
+            frames: this.anims.generateFrameNumbers('dude', { start: 5, end: 8 }),
+            frameRate: 10,
+            repeat: -1
+        })
+
+        // creates one star object (simular to how we've done with player), but hten 11 child objects too.
+        // the first child will be positioned at (12,0), the next at (82,0). Incremented by stepX:
+        stars = this.physics.add.group( {key: 'star', repeat: 11, setXY: { x: 12, y: 0, stepX: 70 } } )
+
+        // gives each child of the star a random bounce (between 0.4 and 0.8)
+        // iterates through the children and sets the value of the bounceY property:
+        stars.children.iterate(function (child) { child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8)) } )
+
+        //sets how heavy we want to player object to be (i.e. how fast it falls):
+        player.body.setGravityY(1)
+
+        // takes objects listed as arguements so one won't pass through another:
+        this.physics.add.collider(player, platforms)
+
+        // so the stars will collide with the platforms rather than fall through:
+        this.physics.add.collider(stars, platforms)
+
+        // populates cursors object with 4 properties: up, down, left, right from keys object
+        // giving us the functionality to create movement using the "update loop"
+        cursors = this.input.keyboard.createCursorKeys()
+
+        // sets an action if a player overlaps with a star. 
+        // In this case, the collectStar function we've declared at the bottom of this page will be invoked:
+        this.physics.add.overlap(player, stars, collectStar, null, this)
+
+        // adding in bombs:
+        bombs = this.physics.add.group()
+
+        // so the bombs will not fall through the platforms:
+        this.physics.add.collider(bombs, platforms)
+
+        // when bombs and player collide, hitBomb funciton declared below is invoked
+        this.physics.add.collider(player, bombs, hitBomb, null, this)
+
+    }
+
+    function update ()
+    {
+        // now that we defined the cursers object, set the animation based on keyboard input:
+        if (cursors.left.isDown){ player.setVelocityX(-160); player.anims.play('left', true) }
+        else if (cursors.right.isDown){ player.setVelocityX(160); player.anims.play('right', true) }
+        else {player.setVelocityX(0); player.anims.play('turn') }
+        if (cursors.up.isDown && player.body.touching.down) { player.setVelocityY(-330) }
+    }
+
+    // function to hide the star by setting its physics body to disabled.
+    // this function is called above if a player object overlaps a star object
+    // function updated to increase score by 10 when player and star collide:
+    function collectStar (player, star){
+        star.disableBody(true, true)
+        score += 10
+        scoreText.setText("Score: " + score)
+
+        // if there are no more stars left: 
+        if (stars.countActive(true) === 0){
+
+            // callBack invoked, reseting y axis of stars and re-enabling them to deploy again:
+            stars.children.iterate(function (child) {child.enableBody(true, child.x, 0, true, true)})
+
+            // check x position of player, generate a random x coordinate on the opposite side of the canvas:
+            var x = (player.x < 400) ? Phaser.Math.Between(400, 800) : Phaser.Math.Between(0, 400)
+            
+            // create bomb, set it to collide with all, bounce with random velocity:
+            var bomb = bombs.create(x, 16, 'bomb')
+            bomb.setBounce(1)
+            bomb.setCollideWorldBounds(true)
+            bomb.setVelocity(Phaser.Math.Between(-200, 200), 20)
+        }
+
+    }
+
+    function hitBomb (player, bomb){
+    this.physics.pause()
+    player.setTint(0xff0000)
+    player.anims.play('turn')
+    gameOver = true
+    }
+
+
+</script>
+
+</body>
+</html>
